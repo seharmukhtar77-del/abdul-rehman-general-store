@@ -39,6 +39,25 @@ app.get('/api/reports',async(req,res)=>{const [sales,purchases,expenses,products
 app.get('/api/demand',async(req,res)=>{const [products,sales]=await Promise.all([Product.find(),Sale.find()]);const map=new Map();sales.forEach(s=>s.items.forEach(i=>map.set(String(i.productId),(map.get(String(i.productId))||0)+Number(i.quantity))));const rows=products.map(p=>({...p.toObject(),soldUnits:map.get(String(p._id))||0,suggestedQty:p.stockQuantity<=p.reorderLevel?p.preferredReorderQty:0,demand:(map.get(String(p._id))||0)>=10?'High':(map.get(String(p._id))||0)>=5?'Medium':'Low'})).sort((a,b)=>b.soldUnits-a.soldUnits);ok(res,rows)});
 app.post('/api/chat',async(req,res)=>{try{const q=String(req.body.message||'').toLowerCase();const [products,sales,customers,purchases,expenses]=await Promise.all([Product.find(),Sale.find(),Customer.find(),Purchase.find(),Expense.find()]);let reply='I can answer about products, stock, sales, purchases, customers, udhaar and expenses. Try asking: “which products are low stock?”';if(q.includes('low stock')||q.includes('low-stock')||q.includes('kam stock')){const low=products.filter(p=>p.stockQuantity<=p.reorderLevel);reply=low.length?`Low-stock products: ${low.map(p=>`${p.name} (${p.stockQuantity} ${p.unit})`).join(', ')}.`:'Good news: no product is currently below its reorder level.'}else if(q.includes('product'))reply=`There are ${products.length} products. ${products.filter(p=>p.stockQuantity<=p.reorderLevel).length} need stock attention.`;else if(q.includes('sale'))reply=`Recorded sales: ${sales.length}. Total sales value: Rs. ${sales.reduce((a,s)=>a+s.total,0).toLocaleString('en-PK')}.`;else if(q.includes('udhaar')||q.includes('credit')||q.includes('outstanding')){const pays=await CreditPayment.find();const out=Math.max(0,sales.reduce((a,s)=>a+Math.max(0,s.total-s.amountPaid),0)-pays.reduce((a,p)=>a+p.amount,0));reply=`Current recorded outstanding udhaar is approximately Rs. ${out.toLocaleString('en-PK')}.`; }else if(q.includes('customer'))reply=`There are ${customers.length} customers in the store records.`;else if(q.includes('purchase'))reply=`Recorded purchases: ${purchases.length}, worth Rs. ${purchases.reduce((a,p)=>a+p.total,0).toLocaleString('en-PK')}.`;else if(q.includes('expense'))reply=`Recorded expenses total Rs. ${expenses.reduce((a,e)=>a+e.amount,0).toLocaleString('en-PK')}.`;ok(res,{reply})}catch(e){err(res,e)}});
 
-const port=Number(process.env.PORT||5000);
-function start(){app.listen(port,()=>console.log(`API running on http://localhost:${port}`));if(!process.env.MONGODB_URI){console.warn('MONGODB_URI is missing. Database requests will fail until it is configured.');return;}mongoose.connect(process.env.MONGODB_URI).then(()=>console.log('MongoDB connected')).catch(e=>console.error('MongoDB connection failed:',e.message));}
-start();
+const port = Number(process.env.PORT || 5000);
+
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(port, () => {
+    console.log(`API running on http://localhost:${port}`);
+  });
+}
+
+if (!process.env.MONGODB_URI) {
+  console.warn(
+    'MONGODB_URI is missing. Database requests will fail until it is configured.'
+  );
+} else {
+  mongoose
+    .connect(process.env.MONGODB_URI)
+    .then(() => console.log('MongoDB connected'))
+    .catch((e) =>
+      console.error('MongoDB connection failed:', e.message)
+    );
+}
+
+export default app;
